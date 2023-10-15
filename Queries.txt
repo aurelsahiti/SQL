@@ -1,0 +1,155 @@
+-- Select data that I will use
+
+SELECT
+  location, date, total_cases, new_cases, total_deaths, population
+FROM
+  `covid-project-5701.Covid.CovidDeaths`
+ORDER BY
+  1,2;
+
+-- Looking at Total Cases vs Total Deaths
+-- Shows likelihood of dying if you contract covid in your country
+
+SELECT
+  location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as death_percentage
+FROM
+  `covid-project-5701.Covid.CovidDeaths`
+WHERE
+  location = 'United States'
+ORDER BY
+  1,2;
+
+-- Looking at Total Cases vs Population
+-- Shows which percentage of the population contracted covid
+
+SELECT
+  location, date, total_cases, population, (total_cases/population)*100 as contracted_percentage
+FROM
+  `covid-project-5701.Covid.CovidDeaths`
+WHERE
+  location = 'United States'
+ORDER BY
+  1,2;
+
+-- Looking at countries with highest infection rate compared to population
+
+SELECT
+  location, population, MAX(total_cases) as highest_infection_count, MAX((total_cases/population))*100 as percent_infected
+FROM
+  `covid-project-5701.Covid.CovidDeaths`
+--WHERE
+--  location = 'United States'
+GROUP BY
+  location, population
+ORDER BY
+  4 desc;
+
+-- Showing countries with highest death count per population
+
+SELECT
+  location, MAX(total_deaths) as total_death_count
+FROM
+  `covid-project-5701.Covid.CovidDeaths`
+WHERE
+  continent is not null
+GROUP BY
+  location
+ORDER BY
+  total_death_count desc;
+
+-- BREAKDOWN BY CONTINENT
+
+SELECT
+  location, MAX(total_deaths) as total_death_count
+FROM
+  `covid-project-5701.Covid.CovidDeaths`
+WHERE
+  continent is null
+GROUP BY
+  location
+ORDER BY
+  total_death_count desc;
+
+-- Global Numbers
+
+SELECT
+  SUM(new_cases) as total_cases, SUM(new_deaths) as total_deaths, (SUM(new_deaths)/SUM(new_cases))*100 as death_percentage
+FROM
+  `covid-project-5701.Covid.CovidDeaths`
+WHERE
+  continent is not null
+ORDER BY
+  1,2;
+
+-- Looking at Total Population vs Vaccinations
+
+SELECT
+  dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as rolling_total_vaccinated
+FROM
+  `covid-project-5701.Covid.CovidDeaths` dea
+JOIN `covid-project-5701.Covid.CovidVaccinations` vac
+  ON dea.location = vac.location
+  AND dea.date = vac.date
+WHERE
+  dea.continent is not null
+ORDER BY
+  2,3;
+
+-- Using CTE
+
+WITH PopvsVac AS (
+  SELECT 
+  dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as rolling_total_vaccinated
+  FROM
+    `covid-project-5701.Covid.CovidDeaths` dea
+  JOIN `covid-project-5701.Covid.CovidVaccinations` vac
+  ON dea.location = vac.location
+  AND dea.date = vac.date
+  WHERE
+    dea.continent is not null
+  )
+SELECT
+  *, (rolling_total_vaccinated/population)*100 as population_vaccinated_percentage
+FROM
+  PopvsVac;
+
+
+-- TEMP TABLE
+
+CREATE TEMP TABLE PercentPopulationVaccinated (
+  continent string,
+  location string,
+  date datetime,
+  population int64,
+  new_vaccinations int64,
+  rolling_total_vaccinated int64
+);
+
+INSERT INTO PercentPopulationVaccinated
+SELECT
+  dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as rolling_total_vaccinated
+FROM
+  `covid-project-5701.Covid.CovidDeaths` dea
+JOIN `covid-project-5701.Covid.CovidVaccinations` vac
+ON dea.location = vac.location
+AND dea.date = vac.date
+WHERE
+  dea.continent is not null;
+
+SELECT
+  *, (rolling_total_vaccinated/population)*100 as population_vaccinated_percentage
+FROM
+  PercentPopulationVaccinated;
+
+-- Creating View to store data for later viualizations
+
+CREATE VIEW Covid.PercentPopulationVaccinated as
+SELECT
+  dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as rolling_total_vaccinated
+FROM
+  `covid-project-5701.Covid.CovidDeaths` dea
+JOIN `covid-project-5701.Covid.CovidVaccinations` vac
+ON dea.location =vac.location
+AND dea.date = vac.date
+WHERE
+  dea.continent is not null
